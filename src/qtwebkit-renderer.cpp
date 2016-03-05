@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/prctl.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <memory>
 
 #include <QApplication>
 #include <QWebPage>
@@ -33,6 +34,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 struct shared_data {
 	pthread_mutex_t mutex;
 	uint8_t data;
+};
+
+class QWebPageLol : public QWebPage {
+    protected:
+        virtual QString userAgentForUrl(const QUrl &url) const final override {
+            return "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.21 (KHTML, like Gecko) QupZilla/1.3.5 Safari/537.21";
+        }
 };
 
 static volatile sig_atomic_t done = 0;
@@ -105,19 +113,19 @@ int main(int argc, char *argv[])
 	init_shared_data(atoi(argv[2]), atoi(argv[3]), suffix);
 
 	QApplication app(argc, argv);
-	QWebPage page;
+  std::unique_ptr<QWebPage> page(new QWebPageLol); //FIXME use make_unique
 
-	QPalette palette = page.palette();
+	QPalette palette = page->palette();
 	palette.setBrush(QPalette::Base, Qt::transparent);
-	page.setPalette(palette);
-	page.settings()->setUserStyleSheetUrl(QUrl::fromUserInput(argv[6]));
-	page.settings()->setObjectCacheCapacities(0, 0, 0);
+	page->setPalette(palette);
+	page->settings()->setUserStyleSheetUrl(QUrl::fromUserInput(argv[6]));
+	page->settings()->setObjectCacheCapacities(0, 0, 0);
 
 	const QUrl url = QUrl::fromUserInput(argv[1]);
-	page.setViewportSize(QSize(width, height));
-	page.mainFrame()->setScrollBarPolicy(Qt::Horizontal, Qt::ScrollBarAlwaysOff);
-	page.mainFrame()->setScrollBarPolicy(Qt::Vertical, Qt::ScrollBarAlwaysOff);
-	page.mainFrame()->setUrl(url);
+	page->setViewportSize(QSize(width, height));
+	page->mainFrame()->setScrollBarPolicy(Qt::Horizontal, Qt::ScrollBarAlwaysOff);
+	page->mainFrame()->setScrollBarPolicy(Qt::Vertical, Qt::ScrollBarAlwaysOff);
+	page->mainFrame()->setUrl(url);
 
 	pthread_mutex_lock(&data->mutex);
 	QImage image(&data->data, width, height, QImage::Format_RGBA8888);
@@ -134,13 +142,13 @@ int main(int argc, char *argv[])
 
 		pthread_mutex_lock(&data->mutex);
 		image.fill(0);
-		page.mainFrame()->render(&painter, QWebFrame::ContentsLayer);
+		page->mainFrame()->render(&painter, QWebFrame::ContentsLayer);
 		pthread_mutex_unlock(&data->mutex);
 
 		// reload file if changed
 		if (refresh) {
 			refresh = 0;
-			page.mainFrame()->setUrl(url);
+			page->mainFrame()->setUrl(url);
 		}
 
 		usleep(1000000 / fps);
